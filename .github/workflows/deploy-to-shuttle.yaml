@@ -1,0 +1,67 @@
+# TODO: Make sure you add your shuttle API key to GitHub secrets
+#
+# 1. Find your API key by logging in to shuttle.rs and going to the
+#    dashboard. There should be a command there like:
+#    ```
+#    cargo shuttle login --api-key <MY_SHUTTLE_API_KEY>
+#    ```
+#    and you can copy your API key from there
+#
+# 2. Add the API key by going to the "Settings" tab, then "Secrets and
+#    variables", then "actions", then click "Add new secret":
+#    https://github.com/<MY_USERNAME>/<MY_REPO_NAME>/settings/secrets/actions/new
+#
+#    Then enter "SHUTTLE_API_KEY" as the name for your secret, and paste
+#    in your shuttle API key in the big text box.
+#
+# After completing the above, this workflow will work
+
+name: Deploy code to shuttle.rs on push to `main`
+
+on:
+  # Trigger the workflow on every push to the main branch that changed a file
+  # matching `src/*.rs` (ie rust source code)
+  push:
+    branches: ["main"]
+    paths:
+      - "src/*.rs"
+  # Also allow you to manually trigger a deployment by clicking a button in the
+  # GH actions web interface. You can find the button at a URL like:
+  # https://github.com/<MY_USERNAME>/<MY_REPO_NAME>/actions/workflows/deploy-to-shuttle.yaml
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  deploy:
+    name: Deploy to shuttle.rs
+    runs-on: ubuntu-latest
+    env:
+      SHUTTLE_API_KEY: ${{ secrets.SHUTTLE_API_KEY }}
+    steps:
+      # Don't even start trying to deploy if we don't have an API key to deploy
+      # with (GitHub will set an API key to the empty string if it doesn't
+      # exist)
+      - if: ${{ env.SHUTTLE_API_KEY == '' }}
+        run: echo 'You need to set your SHUTTLE_API_KEY in GitHub Actions.'; exit 1
+
+      # Check out this repo onto the GH actions runner
+      - uses: actions/checkout@v3
+
+      # Download the rust toolchain
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Cache all the rust build files so we don't download and compile
+      # *everything*, *every time*.
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-shuttle
+        run: cargo install cargo-shuttle
+
+      - name: Authenticate shuttle if SHUTTLE_API_KEY is available
+        run: cargo shuttle login --api-key ${{ secrets.SHUTTLE_API_KEY }}
+
+      # Actually perform the deployment
+      - name: Deploy to shuttle
+        run: cargo shuttle deploy
